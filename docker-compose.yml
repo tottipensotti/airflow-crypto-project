@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  airflow-postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+  
+  local-postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: local
+    volumes:
+      - local_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+  
+  airflow-webserver:
+    image: apache/airflow:2.8.3
+    depends_on:
+      - airflow-postgres
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__WEBSERVER__RBAC: "True"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./requirements.txt:/requirements.txt
+      - ./scripts/entrypoint.sh:/entrypoint.sh
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    entrypoint: /entrypoint.sh
+    command: ["airflow","webserver"]
+  
+  airflow-scheduler:
+    image: apache/airflow:2.8.3
+    depends_on:
+      - airflow-postgres
+      - local-postgres
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./requirements.txt:/requirements.txt
+      - ./scripts/entrypoint.sh:/entrypoint.sh
+      - airflow_logs:/opt/airflow/logs
+    entrypoint: /entrypoint.sh
+    command: ["airflow","scheduler"]
+  
+  # dbt:
+  #   image: ghcr.io/dbt-labs/dbt-postgres:1.7.4
+  #   platform: linux/amd64
+  #   depends_on:
+  #     - local-postgres
+  #   environment:
+  #     DBT_PROFILES_DIR: /dbt
+  #   volumes:
+  #     - ./dbt:/dbt
+  #   working_dir: /dbt
+  #   entrypoint: ["sleep", "infinity"]
+
+volumes:
+  airflow_pg_data:
+  local_pg_data:
+  airflow_logs:
